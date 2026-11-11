@@ -7,10 +7,12 @@
 ODIN    ?= odin
 ODINFMT ?= odinfmt
 
-OUT      := out
-BIN      := $(OUT)/odin-lens
-SRC      := src
-FMT_CFG  := odinfmt.json
+OUT         := out
+BIN_NAME    := odin-lens
+DEBUG_BIN   := $(OUT)/debug/$(BIN_NAME)
+RELEASE_BIN := $(OUT)/release/$(BIN_NAME)
+SRC         := src
+FMT_CFG     := odinfmt.json
 
 # Every directory under src/ that holds .odin files, for per-package `odin test`.
 # (odin test only runs @(test) procedures in the initial package.)
@@ -38,25 +40,32 @@ TEST_DEFINES := -define:ODIN_TEST_FAIL_ON_BAD_MEMORY=true \
 
 # --- targets ----------------------------------------------------------------
 
-.PHONY: all build release run check test fmt fmt-check verify clean install-hooks
+.PHONY: all build release run run-release check test fmt fmt-check verify clean install-hooks
 
-# All build artefacts go here. Order-only prerequisite below: create the
-# directory if missing, but never rebuild the binary just because it is newer.
-$(OUT):
-	mkdir -p $(OUT)
+# Artefacts are split by configuration so debug builds never clobber a release
+# binary. Order-only prerequisites: create the directory if missing, but never
+# rebuild just because the directory's timestamp changed.
+$(OUT)/debug:
+	mkdir -p $@
+
+$(OUT)/release:
+	mkdir -p $@
 
 all: build
 
 # Debug build: symbols, bounds checks, strict diagnostics.
-build: | $(OUT)
-	$(ODIN) build $(SRC) -out:$(BIN) $(DEV)
+build: | $(OUT)/debug
+	$(ODIN) build $(SRC) -out:$(DEBUG_BIN) $(DEV)
 
 # Optimised build. Still strict, because shipping sloppy code is not a reward.
-release: | $(OUT)
-	$(ODIN) build $(SRC) -out:$(BIN) $(RELEASE)
+release: | $(OUT)/release
+	$(ODIN) build $(SRC) -out:$(RELEASE_BIN) $(RELEASE)
 
 run: build
-	./$(BIN)
+	./$(DEBUG_BIN)
+
+run-release: release
+	./$(RELEASE_BIN)
 
 # Type-check only: the fast inner loop. No binary is produced.
 check:
