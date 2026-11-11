@@ -1,0 +1,13 @@
+#!/bin/sh
+#
+# Pre-commit gate: formatting, type-check, tests.
+# Bypass deliberately (not routinely) with: git commit --no-verify
+
+set -e
+
+if ! command -v odin >/dev/null 2>&1; then
+	echo "pre-commit: odin not found in PATH; commit blocked" >&2
+	exit 1
+fi
+
+make --no-print-directory verify

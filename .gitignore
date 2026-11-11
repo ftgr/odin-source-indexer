@@ -1,0 +1,20 @@
+# Build artefacts
+/odin-lens
+*.exe
+*.bin
+*.o
+*.a
+*.so
+*.dylib
+
+# Tool caches
+/.cache/
+/ols-cache/
+__pycache__/
+.venv/
+.pytest_cache/
+
+# Editor / OS noise
+*.swp
+*~
+.DS_Store

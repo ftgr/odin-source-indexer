@@ -1,0 +1,11 @@
+# Normalise line endings on checkout/commit; the repo is LF-only.
+* text=auto eol=lf
+
+*.odin   text eol=lf
+*.json   text eol=lf
+*.md     text eol=lf
+*.sh     text eol=lf
+
+*.png    binary
+*.jpg    binary
+*.gif    binary
