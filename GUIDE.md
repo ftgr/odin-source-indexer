@@ -765,7 +765,7 @@ Commands you'll type daily:
 
 ```
 odin check src                      # type-check, fast
-odin build src -debug -out:odin-lens -vet -vet-unused -vet-shadowing
+odin build src -debug -out:out/odin-lens -vet -vet-unused -vet-shadowing
 odin test src/lexer                 # per package, remember
 odin doc <dir>                      # the oracle for declarations
 odin doc <dir> -doc-format -out:tmp # binary doc dump (stretch oracle)

@@ -7,7 +7,8 @@
 ODIN    ?= odin
 ODINFMT ?= odinfmt
 
-BIN      := odin-lens
+OUT      := out
+BIN      := $(OUT)/odin-lens
 SRC      := src
 FMT_CFG  := odinfmt.json
 
@@ -39,14 +40,19 @@ TEST_DEFINES := -define:ODIN_TEST_FAIL_ON_BAD_MEMORY=true \
 
 .PHONY: all build release run check test fmt fmt-check verify clean install-hooks
 
+# All build artefacts go here. Order-only prerequisite below: create the
+# directory if missing, but never rebuild the binary just because it is newer.
+$(OUT):
+	mkdir -p $(OUT)
+
 all: build
 
 # Debug build: symbols, bounds checks, strict diagnostics.
-build:
+build: | $(OUT)
 	$(ODIN) build $(SRC) -out:$(BIN) $(DEV)
 
 # Optimised build. Still strict, because shipping sloppy code is not a reward.
-release:
+release: | $(OUT)
 	$(ODIN) build $(SRC) -out:$(BIN) $(RELEASE)
 
 run: build
@@ -77,7 +83,7 @@ verify: fmt-check check test
 	@echo "verify: all checks passed"
 
 clean:
-	rm -f $(BIN)
+	rm -rf $(OUT)
 	rm -rf .cache
 
 # Point git at the versioned hooks in .githooks/.
