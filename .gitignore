@@ -1,5 +1,6 @@
 # Build artefacts
 /out/
+/odin-lens
 *.exe
 *.bin
 *.o
