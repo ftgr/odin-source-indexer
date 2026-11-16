@@ -13,10 +13,10 @@ Early development. The CLI skeleton and the strict build/test gates are in place
 (Milestone 0); `symbols` and `tokens` currently print placeholders. The lexer
 and indexer arrive in Milestones 1–7. See [`GUIDE.md`](GUIDE.md) for the plan.
 
-> **Naming:** the repository is `odin-source-indexer`; the build artefact still
-> carries the original working name `odin-lens`.
+## What it does
 
-## What it will do
+Today the CLI validates a command and prints usage; `symbols` and `tokens` are
+wired up as placeholders. As the milestones land it will:
 
 - `symbols <file-or-dir>` — list declarations (packages, imports, procedures,
   structs, unions, enums, bit sets, types, constants, variables) with file,
@@ -24,25 +24,32 @@ and indexer arrive in Milestones 1–7. See [`GUIDE.md`](GUIDE.md) for the plan.
 - `symbols --json` — the same data as a stable JSON envelope for editors and
   scripts.
 - `tokens <file>` — dump the lexer's token stream, one token per line.
-- A JSON-RPC mode for editor integration is planned later.
+- Serve the same answers over JSON-RPC for editor integration (later).
+
+Contract: stdout is data only (safe to pipe), diagnostics go to stderr, and
+exit codes are meaningful (`0` success, nonzero failure).
+
+## Clone and run
+
+```sh
+git clone https://github.com/ftgr/odin-source-indexer.git
+cd odin-source-indexer
+
+make build
+./out/debug/odin-source-indexer help
+
+# or build and run in one step
+make run
+```
+
+The debug build is the development default; `make release` produces an
+optimised binary in `out/release/`.
 
 ## Requirements
 
-- Odin `dev-2026-10` or newer
+- [Odin](https://odin-lang.org/docs/install/) `dev-2026-10` or newer, on `PATH`
 - `odinfmt` (only needed for `make fmt` and `make verify`)
 - GNU make, on Linux
-
-## Build and run
-
-```sh
-make build
-./out/debug/odin-lens help
-
-make release
-./out/release/odin-lens help
-```
-
-`make run` builds the debug binary and runs it.
 
 ## Commands
 
@@ -51,9 +58,6 @@ make release
 | `symbols <file-or-dir> [--json]` | Index declarations (planned) |
 | `tokens <file>` | Dump tokens (planned) |
 | `help`, `-h`, `--help` | Show usage |
-
-Contract: stdout is data only (safe to pipe), diagnostics go to stderr, and
-exit codes are meaningful (`0` success, nonzero failure).
 
 ## Development
 
@@ -76,13 +80,13 @@ runs `make verify` before every commit.
 ## Layout
 
 ```
-src/main.odin        CLI entry point
-src/helpers.odin     command validation and usage
-src/lexer/           token model and lexer (in progress)
-src/index/           symbol index (in progress)
-testdata/            sample inputs for tests
-tools/fmt-check.sh   format drift check (odinfmt has no --check)
-GUIDE.md             milestones M0–M12 and design notes
+src/main.odin               CLI entry point
+src/helpers.odin            command validation and usage
+src/lexer/                  token model and lexer (in progress)
+src/index/                  symbol index (in progress)
+testdata/                   sample inputs for tests
+tools/fmt-check.sh          format drift check (odinfmt has no --check)
+GUIDE.md                    milestones M0–M12 and design notes
 ```
 
 ## License

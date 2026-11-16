@@ -1,4 +1,4 @@
-# odin-lens — agent instructions
+# odin-source-indexer — agent instructions
 
 Project conventions on top of `GUIDE.md`. Follow them unless a milestone says
 otherwise; if a rule has to be broken, leave a comment explaining why.

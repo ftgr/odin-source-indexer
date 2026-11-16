@@ -1,4 +1,4 @@
-# odin-lens — a build guide
+# odin-source-indexer — a build guide
 
 A step-by-step plan for building a real Odin program while learning the language.
 This guide contains **definitions, decisions, and acceptance criteria** — no source
@@ -28,13 +28,13 @@ not compile as-is.)
 
 ## 1. What you are building
 
-**Definition.** `odin-lens` is a local code-intelligence tool for Odin source. It
+**Definition.** `odin-source-indexer` is a local code-intelligence tool for Odin source. It
 reads `.odin` files and answers structural questions: *what is declared here, where
 is it declared, what kind of thing is it.*
 
 It has two surfaces:
 
-1. **CLI (batch).** `odin-lens symbols <path>` prints declarations as text or JSON.
+1. **CLI (batch).** `odin-source-indexer symbols <path>` prints declarations as text or JSON.
    Short-lived process, easy to test, easy to pipe.
 2. **RPC server (long-lived).** Same answers over JSON-RPC on stdio, so an editor
    can keep an index warm instead of re-scanning on every keystroke. This is the
@@ -246,7 +246,7 @@ every socket tutorial gets wrong.
 ## 5. Architecture
 
 ```
-odin-lens/
+odin-source-indexer/
   Makefile              build / run / test / release / clean
   .gitignore            binary, *.bin
   GUIDE.md              this file
@@ -352,7 +352,7 @@ error object, never a crash.
 build.
 
 **Do**
-1. `git init` in `odin-lens`; write `.gitignore` (binary name, `*.bin`).
+1. `git init` in `odin-source-indexer`; write `.gitignore` (binary name, `*.bin`).
 2. Create `src/` with one file declaring `package main` and a `main` procedure that
    prints usage and exits. Use an explicit output name when building.
 3. Write a `Makefile` with `build` (debug build), `run`, `test` (one `odin test`
@@ -765,7 +765,7 @@ Commands you'll type daily:
 
 ```
 odin check src                      # type-check, fast
-odin build src -debug -out:out/debug/odin-lens -vet -vet-unused -vet-shadowing
+odin build src -debug -out:out/debug/odin-source-indexer -vet -vet-unused -vet-shadowing
 odin test src/lexer                 # per package, remember
 odin doc <dir>                      # the oracle for declarations
 odin doc <dir> -doc-format -out:tmp # binary doc dump (stretch oracle)

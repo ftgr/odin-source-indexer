@@ -1,4 +1,4 @@
-# odin-lens — build, check, test, verify
+# odin-source-indexer — build, check, test, verify
 #
 # Strict by default: warnings are errors, style is enforced, unused things fail
 # the build. If a check is too noisy while you are experimenting, run the plain
@@ -8,7 +8,7 @@ ODIN    ?= odin
 ODINFMT ?= odinfmt
 
 OUT         := out
-BIN_NAME    := odin-lens
+BIN_NAME    := odin-source-indexer
 DEBUG_BIN   := $(OUT)/debug/$(BIN_NAME)
 RELEASE_BIN := $(OUT)/release/$(BIN_NAME)
 SRC         := src
