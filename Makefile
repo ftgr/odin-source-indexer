@@ -14,9 +14,11 @@ RELEASE_BIN := $(OUT)/release/$(BIN_NAME)
 SRC         := src
 FMT_CFG     := odinfmt.json
 
-# Every directory under src/ that holds .odin files, for per-package `odin test`.
-# (odin test only runs @(test) procedures in the initial package.)
-PKGS := $(shell find $(SRC) -name '*.odin' -exec dirname {} \; 2>/dev/null | sort -u)
+# Every directory under src/ that holds .odin files, for per-package `odin test`
+# and `odin check`. (odin test only runs @(test) procedures in the initial
+# package.)
+PKGS     := $(shell find $(SRC) -name '*.odin' -exec dirname {} \; 2>/dev/null | sort -u)
+LIB_PKGS := $(filter-out $(SRC),$(PKGS))
 
 # --- flags ------------------------------------------------------------------
 
@@ -67,9 +69,16 @@ run: build
 run-release: release
 	./$(RELEASE_BIN)
 
-# Type-check only: the fast inner loop. No binary is produced.
+# Type-check only: the fast inner loop. No binary is produced. `odin check src`
+# covers the initial package only, so library packages are checked separately
+# with -no-entry-point.
 check:
 	$(ODIN) check $(SRC) $(VET) $(STYLE)
+	@set -e; \
+	for pkg in $(LIB_PKGS); do \
+		printf '\n== %s\n' "$$pkg"; \
+		$(ODIN) check "$$pkg" -no-entry-point $(VET) $(STYLE); \
+	done
 
 # One `odin test` invocation per package, or nested packages go untested.
 test:
