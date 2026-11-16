@@ -1,6 +1,7 @@
 package main
 
 import "core:fmt"
+import "core:mem"
 import "core:os"
 
 usage :: proc(out: ^os.File) {
@@ -9,9 +10,10 @@ usage :: proc(out: ^os.File) {
 	fmt.fprintln(out, "help, -h, --help")
 }
 
-// Returns 0 on success and 1 for an unknown command. Diagnostics go to stderr;
-// only real output is written to stdout (see GUIDE.md section 6.1).
-validate_command :: proc(command: []string) -> int {
+// Returns an exit code: 0 on success, 1 for an unknown command, 2 for a usage
+// error. Diagnostics go to stderr; only real output is written to stdout
+// (see GUIDE.md section 6.1).
+validate_command :: proc(command: []string, allocator: mem.Allocator) -> int {
 	if len(command) < 2 {
 		usage(os.stdout)
 		return 0
@@ -25,8 +27,7 @@ validate_command :: proc(command: []string) -> int {
 		fmt.println("symbols...")
 		return 0
 	case "tokens":
-		fmt.println("tokens...")
-		return 0
+		return run_tokens(command, allocator)
 	}
 
 	fmt.eprintln("Not a valid command!")
