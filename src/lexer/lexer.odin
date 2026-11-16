@@ -1,10 +1,4 @@
 package lexer
 
-import "core:fmt"
-
-
-greet :: proc() {
-	fmt.println("Hello from the lexer.odin")
-}
-
-lexer :: proc() {}
+// The lexer lands in Milestone 2 (see GUIDE.md); the token model is in
+// token.odin.
