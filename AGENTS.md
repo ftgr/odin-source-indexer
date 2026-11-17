@@ -83,6 +83,20 @@ Odin has no exceptions. A fallible call returns its failure in a second value
 (`ok`, `os.Error`, `mem.Allocator_Error`, ...); that value is part of the
 contract.
 
+- **Return the error last.** A fallible procedure returns `(value, err)` or
+  `(a, b, err)` — never `(err, value)`. `or_return` propagates the final value
+  into the caller's error slot, and `or_else`/`value, ok` idioms read the same
+  trailing position. This matches `core:os`, `core:mem`, and every
+  standard-library fallible call.
+
+  ```odin
+  // Correct: the error is the last return value.
+  load :: proc(path: string, allocator: mem.Allocator) -> (data: []byte, err: os.Error)
+
+  // Wrong: or_return cannot see this error.
+  load_bad :: proc(path: string) -> (err: os.Error, data: []byte)
+  ```
+
 - Never discard a result that can fail: no `_ = err`, no single-value form of a
   two-result call, no `assert(err == nil)` on data that comes from the user or
   the filesystem.

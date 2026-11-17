@@ -112,13 +112,15 @@ run it per package.
 
 **Procedure and multiple return values.** Everything is a procedure; there are no
 methods, no classes, no constructors, no exceptions. A procedure can return
-several values, and the idiomatic error channel is the last one. *Why:* every
-I/O call in this project returns `(value, error)`.
+several values, and the error channel is **always the last return value**. *Why:*
+every I/O call in this project returns `(value, error)`, and `or_return` reads
+that trailing slot.
 
 **The `value, ok` / `value, err` idiom.** Errors are ordinary values; a call either
-returns a non-nil error or a valid result. `or_return` propagates the second value
-if it is non-nil; `or_else` supplies a fallback. *Why:* you will write this dozens
-of times; the discipline of "handle or propagate" replaces try/except.
+returns a non-nil error or a valid result. `or_return` propagates the last value
+if it is non-nil, which is why errors go last; `or_else` supplies a fallback for
+the `value, ok` form. *Why:* you will write this dozens of times; the discipline
+of "handle or propagate" replaces try/except.
 
 **`defer`.** Schedules a statement to run when the enclosing scope exits, LIFO.
 Used for `os.close`, `read_directory_iterator_destroy`, arena resets. *Why:* there
