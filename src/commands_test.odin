@@ -1,5 +1,6 @@
 package main
 
+import "core:log"
 import "core:os"
 import "core:testing"
 
@@ -46,4 +47,43 @@ read_source_missing_path :: proc(t: ^testing.T) {
 	testing.expect(t, err != nil, "a missing path must return an error")
 	testing.expect(t, data == nil, "no data is returned on error")
 	testing.expect_value(t, size, i64(0))
+}
+
+@(test)
+read_source_empty_file :: proc(t: ^testing.T) {
+	path := ".odin-source-indexer-empty.tmp"
+
+	write_err := os.write_entire_file_from_string(path, "")
+	defer os.remove(path)
+	if !testing.expectf(t, write_err == nil, "could not write fixture %s: %v", path, write_err) {
+		return
+	}
+
+	data, size, err := read_source(path, context.allocator)
+	if !testing.expectf(t, err == nil, "read_source(%s): %v", path, err) {
+		return
+	}
+	defer delete(data, context.allocator)
+
+	testing.expect_value(t, size, i64(0))
+	testing.expect_value(t, len(data), 0)
+	testing.expect_value(t, count_lines(data), 0)
+}
+
+@(test)
+run_tokens_exit_codes :: proc(t: ^testing.T) {
+	// These calls report the expected failures through the logger; silence it
+	// so the test output only shows real problems.
+	old_logger := context.logger
+	context.logger = log.nil_logger()
+	defer context.logger = old_logger
+
+	usage_code := run_tokens([]string{"odin-source-indexer", "tokens"}, context.allocator)
+	testing.expect_value(t, usage_code, 2)
+
+	io_code := run_tokens(
+		[]string{"odin-source-indexer", "tokens", ".odin-source-indexer-does-not-exist.tmp"},
+		context.allocator,
+	)
+	testing.expect_value(t, io_code, 1)
 }

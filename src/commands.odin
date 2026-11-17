@@ -40,7 +40,9 @@ read_source :: proc(
 	if err != nil {
 		return nil, 0, err
 	}
-	if size < 0 {
+	// A negative size, or one that cannot be represented as int, is not a file
+	// we can allocate for.
+	if size < 0 || i64(int(size)) != size {
 		return nil, 0, os.General_Error.Invalid_File
 	}
 

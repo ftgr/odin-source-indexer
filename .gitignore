@@ -19,3 +19,6 @@ __pycache__/
 *.swp
 *~
 .DS_Store
+
+# Test fixtures (created and removed by the tests; ignore leftovers from aborts)
+/.odin-source-indexer-*.tmp

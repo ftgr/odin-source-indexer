@@ -9,14 +9,16 @@ public one milestone at a time.
 
 ## Status
 
-Early development. The CLI skeleton and the strict build/test gates are in place
-(Milestone 0); `symbols` and `tokens` currently print placeholders. The lexer
-and indexer arrive in Milestones 1–7. See [`GUIDE.md`](GUIDE.md) for the plan.
+Milestone 0 (CLI skeleton, strict build/test gates) and Milestone 1 (token
+model, `tokens` file summary) are complete. `tokens <file>` reports the file's
+size, line count, and bytes read; the full token stream arrives with the lexer
+in Milestone 2. `symbols` is still a placeholder. See
+[`GUIDE.md`](GUIDE.md) for the plan.
 
 ## What it does
 
-Today the CLI validates a command and prints usage; `symbols` and `tokens` are
-wired up as placeholders. As the milestones land it will:
+Today the CLI validates a command, prints usage, and implements the M1 `tokens`
+summary; `symbols` is still a placeholder. As the milestones land it will:
 
 - `symbols <file-or-dir>` — list declarations (packages, imports, procedures,
   structs, unions, enums, bit sets, types, constants, variables) with file,
@@ -56,7 +58,7 @@ optimised binary in `out/release/`.
 | Command | Purpose |
 | --- | --- |
 | `symbols <file-or-dir> [--json]` | Index declarations (planned) |
-| `tokens <file>` | Dump tokens (planned) |
+| `tokens <file>` | Report size, line count, and bytes read (token dump in M2) |
 | `help`, `-h`, `--help` | Show usage |
 
 ## Development
@@ -80,8 +82,9 @@ runs `make verify` before every commit.
 ## Layout
 
 ```
-src/main.odin               CLI entry point
+src/main.odin               CLI entry point, logging and leak tracking
 src/helpers.odin            command validation and usage
+src/commands.odin           read_source, count_lines, tokens command
 src/lexer/                  token model and lexer (in progress)
 src/index/                  symbol index (in progress)
 testdata/                   sample inputs for tests
