@@ -5,6 +5,7 @@ import "core:fmt"
 import "core:log"
 import "core:mem"
 import "core:os"
+import "lexer"
 
 // read_source reads the whole file at path into a buffer allocated with
 // allocator. The caller owns data on success and frees it with
@@ -82,8 +83,8 @@ count_lines :: proc(data: []byte) -> int {
 	return newlines
 }
 
-// run_tokens implements `tokens <file>`: read the file and report its path,
-// size, line count, and the number of bytes read. Exit codes: 0 success,
+// run_tokens implements `tokens <file>`: read the file and dump its token
+// stream as `line:column kind text`, one token per line. Exit codes: 0 success,
 // 1 I/O error, 2 usage error.
 run_tokens :: proc(command: []string, allocator: mem.Allocator) -> int {
 	// 1. Validate CLI arity: expects e.g. ["prog", "tokens", "<filepath>"].
@@ -96,7 +97,7 @@ run_tokens :: proc(command: []string, allocator: mem.Allocator) -> int {
 	filepath := command[2]
 
 	// 2. Read the source file using the caller-supplied allocator.
-	data, size, err := read_source(filepath, allocator)
+	data, _, err := read_source(filepath, allocator)
 	if err != nil {
 		log.errorf("tokens: %s: %v", filepath, err)
 		return 1
@@ -104,12 +105,19 @@ run_tokens :: proc(command: []string, allocator: mem.Allocator) -> int {
 	// Placed strictly after the error check so we never free a failed read.
 	defer delete(data, allocator)
 
-	// 3. Compute the summary and emit data to stdout only.
-	lines := count_lines(data)
-	fmt.printfln("path:  %s", filepath)
-	fmt.printfln("size:  %d bytes", size)
-	fmt.printfln("lines: %d", lines)
-	fmt.printfln("read:  %d bytes", len(data))
+	// 3. Tokenize. string(data) is a view, not a copy, so every Token.text
+	//    borrows this buffer and stays valid until the deferred delete.
+	tokens, tokenize_err := lexer.tokenize(string(data), allocator)
+	if tokenize_err != nil {
+		log.errorf("tokens: %s: %v", filepath, tokenize_err)
+		return 1
+	}
+	defer delete(tokens, allocator)
+
+	// 4. Emit data to stdout only.
+	for tok in tokens {
+		fmt.printf("%d:%d\t%v\t%q\n", tok.line, tok.column, tok.kind, tok.text)
+	}
 
 	return 0
 }
