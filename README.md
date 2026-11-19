@@ -9,16 +9,17 @@ public one milestone at a time.
 
 ## Status
 
-Milestone 0 (CLI skeleton, strict build/test gates) and Milestone 1 (token
-model, `tokens` file summary) are complete. `tokens <file>` reports the file's
-size, line count, and bytes read; the full token stream arrives with the lexer
-in Milestone 2. `symbols` is still a placeholder. See
-[`GUIDE.md`](GUIDE.md) for the plan.
+Milestone 0 (CLI skeleton, strict build/test gates), Milestone 1 (token model),
+and Milestone 2 (lexer core) are complete: `tokens <file>` prints one token per
+line as `line:column kind text`, covering identifiers, keywords, operators, and
+punctuation. Numbers and quoted literals arrive in Milestone 3, comments in
+Milestone 4. `symbols` is still a placeholder. See [`GUIDE.md`](GUIDE.md) for the
+plan.
 
 ## What it does
 
-Today the CLI validates a command, prints usage, and implements the M1 `tokens`
-summary; `symbols` is still a placeholder. As the milestones land it will:
+Today the CLI validates a command, prints usage, and dumps the token stream for
+`tokens`; `symbols` is still a placeholder. As the milestones land it will:
 
 - `symbols <file-or-dir>` — list declarations (packages, imports, procedures,
   structs, unions, enums, bit sets, types, constants, variables) with file,
@@ -58,7 +59,7 @@ optimised binary in `out/release/`.
 | Command | Purpose |
 | --- | --- |
 | `symbols <file-or-dir> [--json]` | Index declarations (planned) |
-| `tokens <file>` | Report size, line count, and bytes read (token dump in M2) |
+| `tokens <file>` | Dump the token stream as `line:column kind text` |
 | `help`, `-h`, `--help` | Show usage |
 
 ## Development
