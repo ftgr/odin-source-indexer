@@ -9,12 +9,11 @@ public one milestone at a time.
 
 ## Status
 
-Milestone 0 (CLI skeleton, strict build/test gates), Milestone 1 (token model),
-and Milestone 2 (lexer core) are complete: `tokens <file>` prints one token per
-line as `line:column kind text`, covering identifiers, keywords, operators, and
-punctuation. Numbers and quoted literals arrive in Milestone 3, comments in
-Milestone 4. `symbols` is still a placeholder. See [`GUIDE.md`](GUIDE.md) for the
-plan.
+Milestones 0–3 are complete: `tokens <file>` prints one token per line as
+`line:column kind text`, covering identifiers, keywords, operators, punctuation,
+numeric literals (including `0h` hex floats), interpreted, raw, and
+triple-quoted strings, and rune literals. Comments arrive in Milestone 4.
+`symbols` is still a placeholder. See [`GUIDE.md`](GUIDE.md) for the plan.
 
 ## What it does
 
@@ -30,7 +29,9 @@ Today the CLI validates a command, prints usage, and dumps the token stream for
 - Serve the same answers over JSON-RPC for editor integration (later).
 
 Contract: stdout is data only (safe to pipe), diagnostics go to stderr, and
-exit codes are meaningful (`0` success, nonzero failure).
+exit codes are meaningful (`0` success, nonzero failure). A malformed literal
+becomes an `Invalid` token and is reported once as `file:line:column: error` on
+stderr, while the rest of the file is still tokenized.
 
 ## Clone and run
 
@@ -86,7 +87,7 @@ runs `make verify` before every commit.
 src/main.odin               CLI entry point, logging and leak tracking
 src/helpers.odin            command validation and usage
 src/commands.odin           read_source, count_lines, tokens command
-src/lexer/                  token model and lexer (in progress)
+src/lexer/                  token model, cursor, and lexer
 src/index/                  symbol index (in progress)
 testdata/                   sample inputs for tests
 tools/fmt-check.sh          format drift check (odinfmt has no --check)
