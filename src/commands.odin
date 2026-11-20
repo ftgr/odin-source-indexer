@@ -85,7 +85,7 @@ count_lines :: proc(data: []byte) -> int {
 
 // run_tokens implements `tokens <file>`: read the file and dump its token
 // stream as `line:column kind text`, one token per line. Exit codes: 0 success,
-// 1 I/O error, 2 usage error.
+// 1 I/O or lexical error, 2 usage error.
 run_tokens :: proc(command: []string, allocator: mem.Allocator) -> int {
 	// 1. Validate CLI arity: expects e.g. ["prog", "tokens", "<filepath>"].
 	if len(command) != 3 {
@@ -107,7 +107,8 @@ run_tokens :: proc(command: []string, allocator: mem.Allocator) -> int {
 
 	// 3. Tokenize. string(data) is a view, not a copy, so every Token.text
 	//    borrows this buffer and stays valid until the deferred delete.
-	tokens, tokenize_err := lexer.tokenize(string(data), allocator)
+	lex := lexer.lexer_init(string(data))
+	tokens, tokenize_err := lexer.tokenize(&lex, allocator)
 	if tokenize_err != nil {
 		log.errorf("tokens: %s: %v", filepath, tokenize_err)
 		return 1
@@ -117,6 +118,13 @@ run_tokens :: proc(command: []string, allocator: mem.Allocator) -> int {
 	// 4. Emit data to stdout only.
 	for tok in tokens {
 		fmt.printf("%d:%d\t%v\t%q\n", tok.line, tok.column, tok.kind, tok.text)
+	}
+
+	// 5. Lexical problems do not stop the scan: the invalid token is already in
+	//    the stream, so report the first one on stderr and fail the command.
+	if lex.error != .None {
+		log.errorf("tokens: %s:%d:%d: %v", filepath, lex.error_line, lex.error_column, lex.error)
+		return 1
 	}
 
 	return 0

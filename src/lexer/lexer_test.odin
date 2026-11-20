@@ -45,7 +45,7 @@ whitespace_skip_test :: proc(t: ^testing.T) {
 	testing.expect_value(t, c.line, 2)
 	testing.expect_value(t, c.column, 3)
 
-	r, _ := cursor_peek(&c)
+	r, _ := cursor_peek(c)
 	testing.expect_value(t, r, 'x')
 
 	// Nothing to skip: position and location stay put.
@@ -58,7 +58,7 @@ whitespace_skip_test :: proc(t: ^testing.T) {
 	// An all-whitespace source ends at EOF.
 	blank := cursor_init("  \n")
 	skip_whitespace(&blank)
-	testing.expect(t, cursor_eof(&blank), "whitespace-only source should be EOF")
+	testing.expect(t, cursor_eof(blank), "whitespace-only source should be EOF")
 	testing.expect_value(t, blank.line, 2)
 	testing.expect_value(t, blank.column, 1)
 }
@@ -199,9 +199,11 @@ operator_table_test :: proc(t: ^testing.T) {
 
 @(test)
 tokenize_test :: proc(t: ^testing.T) {
-	tokens, err := tokenize("for x := y\n", context.allocator)
+	lex := lexer_init("for x := y\n")
+	tokens, err := tokenize(&lex, context.allocator)
 	testing.expect(t, err == nil, "tokenize should succeed")
 	defer delete(tokens, context.allocator)
+	testing.expect_value(t, lex.error, Lex_Error.None)
 
 	want := []struct {
 		kind: Token_Kind,
@@ -223,4 +225,209 @@ tokenize_test :: proc(t: ^testing.T) {
 	testing.expect_value(t, tokens[1].column, 5)
 	testing.expect_value(t, tokens[4].byte_offset, 9)
 	testing.expect_value(t, tokens[4].column, 10)
+}
+
+// first_token scans one token from src and also returns the lexer's first
+// error, so the literal tests can assert both the token and the diagnostic.
+first_token :: proc(src: string) -> (tok: Token, err: Lex_Error) {
+	lex := lexer_init(src)
+	tok = next(&lex)
+	return tok, lex.error
+}
+
+@(test)
+number_scan_test :: proc(t: ^testing.T) {
+	cases := []struct {
+		src:   string,
+		kind:  Token_Kind,
+		text:  string,
+		rest:  string, // source left after the token
+		error: Lex_Error,
+	} {
+		{"0", .Integer, "0", "", .None},
+		{"42", .Integer, "42", "", .None},
+		{"1_000_000", .Integer, "1_000_000", "", .None},
+		{"0xFF", .Integer, "0xFF", "", .None},
+		{"0b1010", .Integer, "0b1010", "", .None},
+		{"0o755", .Integer, "0o755", "", .None},
+		// 0h is a hexadecimal float with exactly 4, 8, or 16 hex digits.
+		{"0hffff", .Float, "0hffff", "", .None},
+		{"0h7ff00000_00000000", .Float, "0h7ff00000_00000000", "", .None},
+		{"0h", .Invalid, "0h", "", .Invalid_Number},
+		{"0h123", .Float, "0h123", "", .Invalid_Number}, // wrong digit count
+		{"1.5", .Float, "1.5", "", .None},
+		{"1e9", .Float, "1e9", "", .None},
+		{"1E-9", .Float, "1E-9", "", .None},
+		{"2.5e+3", .Float, "2.5e+3", "", .None},
+		{"3i", .Imag, "3i", "", .None},
+		{"1.5i", .Imag, "1.5i", "", .None},
+		// Traps from GUIDE: the dot needs a digit, and so does the exponent.
+		{"1..2", .Integer, "1", "..2", .None},
+		{"1.0..2.0", .Float, "1.0", "..2.0", .None},
+		{"1efoo", .Integer, "1", "efoo", .None},
+		{".5", .Period, ".", "5", .None},
+		// A prefix with no digits is an error token, not a hang.
+		{"0x", .Invalid, "0x", "", .Invalid_Number},
+		{"0b2", .Invalid, "0b", "2", .Invalid_Number},
+	}
+
+	for c in cases {
+		lex := lexer_init(c.src)
+		tok := next(&lex)
+		testing.expect_value(t, tok.kind, c.kind, value_expr = c.src)
+		testing.expect_value(t, tok.text, c.text, value_expr = c.src)
+		testing.expect_value(t, lex.cursor.data[lex.cursor.position:], c.rest, value_expr = c.src)
+		testing.expect_value(t, lex.error, c.error, value_expr = c.src)
+	}
+}
+
+@(test)
+string_scan_test :: proc(t: ^testing.T) {
+	cases := []struct {
+		src:   string,
+		kind:  Token_Kind,
+		text:  string,
+		rest:  string,
+		error: Lex_Error,
+	} {
+		{`""`, .String, `""`, "", .None},
+		{`"hello"`, .String, `"hello"`, "", .None},
+		{`"a\"b"`, .String, `"a\"b"`, "", .None},
+		{`"\\"`, .String, `"\\"`, "", .None},
+		{`"\x41\u00e9\U0001F600"`, .String, `"\x41\u00e9\U0001F600"`, "", .None},
+		{`"\101"`, .String, `"\101"`, "", .None},
+		{`"\q"`, .Invalid, `"\q"`, "", .Invalid_Escape},
+		{`"abc`, .Invalid, `"abc`, "", .Unterminated_String},
+		// A raw newline ends an interpreted string but is not consumed.
+		{"\"a\nb\"", .Invalid, "\"a", "\nb\"", .Unterminated_String},
+		// Backslashes and newlines are literal inside raw strings.
+		{"`raw\\n`", .String, "`raw\\n`", "", .None},
+		{"`one\ntwo`", .String, "`one\ntwo`", "", .None},
+		{"`abc", .Invalid, "`abc", "", .Unterminated_Raw_String},
+		// Triple-quoted strings may span lines; """ still processes escapes.
+		{"\"\"\"one\ntwo\"\"\"", .String, "\"\"\"one\ntwo\"\"\"", "", .None},
+		{"\"\"\"a\\\"b\"\"\"", .String, "\"\"\"a\\\"b\"\"\"", "", .None},
+		{"\"\"\"a\"b\"\"\"", .String, "\"\"\"a\"b\"\"\"", "", .None},
+		{"\"\"\"abc", .Invalid, "\"\"\"abc", "", .Unterminated_String},
+		{"```one\ntwo```", .String, "```one\ntwo```", "", .None},
+		{"```abc", .Invalid, "```abc", "", .Unterminated_Raw_String},
+	}
+
+	for c in cases {
+		lex := lexer_init(c.src)
+		tok := next(&lex)
+		testing.expect_value(t, tok.kind, c.kind, value_expr = c.src)
+		testing.expect_value(t, tok.text, c.text, value_expr = c.src)
+		testing.expect_value(t, lex.cursor.data[lex.cursor.position:], c.rest, value_expr = c.src)
+		testing.expect_value(t, lex.error, c.error, value_expr = c.src)
+	}
+
+	// Newlines inside a raw string still advance line and column.
+	lex := lexer_init("`one\ntwo` x")
+	raw := next(&lex)
+	testing.expect_value(t, raw.kind, .String)
+	testing.expect_value(t, raw.line, 1)
+	testing.expect_value(t, raw.column, 1)
+
+	after := next(&lex)
+	testing.expect_value(t, after.kind, .Ident)
+	testing.expect_value(t, after.text, "x")
+	testing.expect_value(t, after.line, 2)
+	testing.expect_value(t, after.column, 6)
+
+	// The same holds for triple-quoted strings.
+	triple_lex := lexer_init("\"\"\"one\ntwo\"\"\" x")
+	triple := next(&triple_lex)
+	testing.expect_value(t, triple.kind, .String)
+
+	triple_after := next(&triple_lex)
+	testing.expect_value(t, triple_after.kind, .Ident)
+	testing.expect_value(t, triple_after.line, 2)
+	testing.expect_value(t, triple_after.column, 8)
+}
+
+@(test)
+rune_scan_test :: proc(t: ^testing.T) {
+	cases := []struct {
+		src:   string,
+		kind:  Token_Kind,
+		text:  string,
+		error: Lex_Error,
+	} {
+		{`'a'`, .Rune, `'a'`, .None},
+		{"'é'", .Rune, "'é'", .None},
+		{`'\n'`, .Rune, `'\n'`, .None},
+		{`'\''`, .Rune, `'\''`, .None}, // escaped quote must not close early
+		{`'\u00e9'`, .Rune, `'\u00e9'`, .None},
+		{`''`, .Invalid, `''`, .Invalid_Rune},
+		{`'ab'`, .Invalid, `'ab'`, .Invalid_Rune},
+		{`'a`, .Invalid, `'a`, .Unterminated_Rune},
+		{`'\q'`, .Invalid, `'\q'`, .Invalid_Escape},
+	}
+
+	for c in cases {
+		tok, err := first_token(c.src)
+		testing.expect_value(t, tok.kind, c.kind, value_expr = c.src)
+		testing.expect_value(t, tok.text, c.text, value_expr = c.src)
+		testing.expect_value(t, err, c.error, value_expr = c.src)
+	}
+
+	// A raw newline ends the rune but is left for the whitespace skipper.
+	lex := lexer_init("'a\n")
+	tok := next(&lex)
+	testing.expect_value(t, tok.kind, .Invalid)
+	testing.expect_value(t, tok.text, "'a")
+	testing.expect_value(t, lex.error, Lex_Error.Unterminated_Rune)
+	testing.expect_value(t, lex.cursor.line, 1)
+}
+
+@(test)
+first_error_wins_test :: proc(t: ^testing.T) {
+	// Three bad literals: only the first error is kept, but every one of them
+	// still becomes a token and scanning reaches the end.
+	lex := lexer_init(`0x "\q" 'ab'`)
+	tokens, err := tokenize(&lex, context.allocator)
+	testing.expect(t, err == nil, "tokenize should succeed")
+	defer delete(tokens, context.allocator)
+
+	testing.expect_value(t, lex.error, Lex_Error.Invalid_Number)
+	testing.expect_value(t, lex.error_line, 1)
+	testing.expect_value(t, lex.error_column, 1) // points at the start of "0x"
+	testing.expect_value(t, lex.error_offset, 0)
+
+	if !testing.expect_value(t, len(tokens), 3) {
+		return
+	}
+	for tok in tokens {
+		testing.expect_value(t, tok.kind, Token_Kind.Invalid, value_expr = tok.text)
+	}
+}
+
+@(test)
+mixed_literal_test :: proc(t: ^testing.T) {
+	lex := lexer_init("x := \"a\\\"b\" + 0x1F")
+	tokens, err := tokenize(&lex, context.allocator)
+	testing.expect(t, err == nil, "tokenize should succeed")
+	defer delete(tokens, context.allocator)
+	testing.expect_value(t, lex.error, Lex_Error.None)
+
+	want := []struct {
+		kind: Token_Kind,
+		text: string,
+	} {
+		{.Ident, "x"},
+		{.Colon, ":"},
+		{.Eq, "="},
+		{.String, `"a\"b"`},
+		{.Add, "+"},
+		{.Integer, "0x1F"},
+	}
+
+	if !testing.expect_value(t, len(tokens), len(want)) {
+		return
+	}
+	for tok, i in tokens {
+		testing.expect_value(t, tok.kind, want[i].kind, value_expr = tok.text)
+		testing.expect_value(t, tok.text, want[i].text)
+	}
 }
