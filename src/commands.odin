@@ -70,7 +70,8 @@ read_source :: proc(
 
 // count_lines counts newline-terminated lines: an empty buffer has 0 lines,
 // "a" has 1, "a\n" has 1 (no phantom line after the trailing newline), and
-// "a\n\n" has 2. '\r' is not a newline here; CRLF files are handled in M4.
+// "a\n\n" has 2. Only '\n' terminates a line, so each "\r\n" counts once and a
+// lone '\r' is not a line break.
 count_lines :: proc(data: []byte) -> int {
 	if len(data) == 0 {
 		return 0
@@ -84,8 +85,9 @@ count_lines :: proc(data: []byte) -> int {
 }
 
 // run_tokens implements `tokens <file>`: read the file and dump its token
-// stream as `line:column kind text`, one token per line. Exit codes: 0 success,
-// 1 I/O or lexical error, 2 usage error.
+// stream as `line:column kind text`, one token per line. Exit codes follow
+// GUIDE 6.1: 0 when the file was read and tokenized (even if the lexer recorded
+// a lexical error), 1 when the file cannot be read, 2 for a usage error.
 run_tokens :: proc(command: []string, allocator: mem.Allocator) -> int {
 	// 1. Validate CLI arity: expects e.g. ["prog", "tokens", "<filepath>"].
 	if len(command) != 3 {
@@ -121,10 +123,10 @@ run_tokens :: proc(command: []string, allocator: mem.Allocator) -> int {
 	}
 
 	// 5. Lexical problems do not stop the scan: the invalid token is already in
-	//    the stream, so report the first one on stderr and fail the command.
+	//    the stream, so report the first one on stderr and still succeed. The
+	//    token dump is complete; GUIDE 6.1 reserves exit 1 for unreadable input.
 	if lex.error != .None {
 		log.errorf("tokens: %s:%d:%d: %v", filepath, lex.error_line, lex.error_column, lex.error)
-		return 1
 	}
 
 	return 0

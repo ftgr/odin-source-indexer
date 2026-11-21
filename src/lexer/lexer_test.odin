@@ -64,6 +64,44 @@ whitespace_skip_test :: proc(t: ^testing.T) {
 }
 
 @(test)
+token_position_test :: proc(t: ^testing.T) {
+	// Each case names the last token in the source. Offsets are 0-based bytes;
+	// line and column are 1-based and the column counts runes, not bytes.
+	cases := []struct {
+		src:    string,
+		text:   string,
+		offset: int,
+		line:   int,
+		column: int,
+	} {
+		{"x", "x", 0, 1, 1},
+		{"\tx", "x", 1, 1, 2}, // a tab is one column
+		{"é x", "x", 3, 1, 3}, // é is two bytes but one column
+		{"日本語 x", "x", 10, 1, 5},
+		{"a\r\nb", "b", 3, 2, 1}, // CRLF is one line break
+		{"// c\r\nx", "x", 6, 2, 1}, // CRLF ends a line comment
+		{"a /* c\r\nd */ b", "b", 13, 2, 6}, // CRLF inside a block comment
+	}
+
+	for c in cases {
+		lex := lexer_init(c.src)
+		last: Token
+		for {
+			tok := next(&lex)
+			if tok.kind == .EOF {
+				break
+			}
+			last = tok
+		}
+		testing.expect_value(t, lex.error, Lex_Error.None, value_expr = c.src)
+		testing.expect_value(t, last.text, c.text, value_expr = c.src)
+		testing.expect_value(t, last.byte_offset, c.offset, value_expr = c.src)
+		testing.expect_value(t, last.line, c.line, value_expr = c.src)
+		testing.expect_value(t, last.column, c.column, value_expr = c.src)
+	}
+}
+
+@(test)
 identifier_scan_test :: proc(t: ^testing.T) {
 	cases := []struct {
 		src:      string,
@@ -430,4 +468,169 @@ mixed_literal_test :: proc(t: ^testing.T) {
 		testing.expect_value(t, tok.kind, want[i].kind, value_expr = tok.text)
 		testing.expect_value(t, tok.text, want[i].text)
 	}
+}
+
+@(test)
+comment_skip_test :: proc(t: ^testing.T) {
+	cases := []struct {
+		src:   string,
+		texts: []string,
+	} {
+		{"x // trailing\ny", []string{"x", "y"}},
+		{"x /* block */ y", []string{"x", "y"}},
+		// Block comments nest; the inner "*/" must not close the outer one.
+		{"x /* a /* b */ c */ y", []string{"x", "y"}},
+		{"/* first */ x /* second */ y", []string{"x", "y"}},
+		{"// only a line comment", []string{}},
+		{"/* only a block comment */", []string{}},
+		{"x / y", []string{"x", "/", "y"}}, // division, not a comment
+		{"x /= y", []string{"x", "/=", "y"}}, // assignment, not a comment
+		{"x /*/ still a comment */ y", []string{"x", "y"}},
+	}
+
+	for c in cases {
+		lex := lexer_init(c.src)
+		tokens, err := tokenize(&lex, context.allocator)
+		testing.expectf(t, err == nil, "tokenize(%q): %v", c.src, err)
+		defer delete(tokens, context.allocator)
+		testing.expect_value(t, lex.error, Lex_Error.None, value_expr = c.src)
+
+		if !testing.expect_value(t, len(tokens), len(c.texts), value_expr = c.src) {
+			continue
+		}
+		for tok, i in tokens {
+			testing.expect_value(t, tok.text, c.texts[i], value_expr = c.src)
+		}
+	}
+}
+
+@(test)
+comment_keep_test :: proc(t: ^testing.T) {
+	cases := []struct {
+		src:   string,
+		kinds: []Token_Kind,
+		texts: []string,
+	} {
+		{
+			"x // trailing\ny",
+			[]Token_Kind{.Ident, .Comment, .Ident},
+			[]string{"x", "// trailing", "y"},
+		},
+		{
+			"x /* block */ y",
+			[]Token_Kind{.Ident, .Comment, .Ident},
+			[]string{"x", "/* block */", "y"},
+		},
+		{
+			"a /* one /* two */ three */ b",
+			[]Token_Kind{.Ident, .Comment, .Ident},
+			[]string{"a", "/* one /* two */ three */", "b"},
+		},
+		{"// only", []Token_Kind{.Comment}, []string{"// only"}},
+		{"/* only */", []Token_Kind{.Comment}, []string{"/* only */"}},
+	}
+
+	for c in cases {
+		lex := lexer_init_with_comments(c.src)
+		tokens, err := tokenize(&lex, context.allocator)
+		testing.expectf(t, err == nil, "tokenize(%q): %v", c.src, err)
+		defer delete(tokens, context.allocator)
+		testing.expect_value(t, lex.error, Lex_Error.None, value_expr = c.src)
+
+		if !testing.expect_value(t, len(tokens), len(c.kinds), value_expr = c.src) {
+			continue
+		}
+		for tok, i in tokens {
+			testing.expect_value(t, tok.kind, c.kinds[i], value_expr = c.src)
+			testing.expect_value(t, tok.text, c.texts[i], value_expr = c.src)
+		}
+	}
+
+	// A line comment stops before the newline and starts where "//" starts.
+	line_lex := lexer_init_with_comments("x // c\ny")
+	testing.expect_value(t, next(&line_lex).text, "x")
+	line_comment := next(&line_lex)
+	testing.expect_value(t, line_comment.kind, .Comment)
+	testing.expect_value(t, line_comment.text, "// c")
+	testing.expect_value(t, line_comment.line, 1)
+	testing.expect_value(t, line_comment.column, 3)
+	line_after := next(&line_lex)
+	testing.expect_value(t, line_after.line, 2)
+	testing.expect_value(t, line_after.column, 1)
+
+	// Tabs count as one column, including before a comment.
+	tab_lex := lexer_init_with_comments("\t// c\nx")
+	tab_comment := next(&tab_lex)
+	testing.expect_value(t, tab_comment.column, 2)
+	tab_after := next(&tab_lex)
+	testing.expect_value(t, tab_after.line, 2)
+	testing.expect_value(t, tab_after.column, 1)
+
+	// A block comment spanning lines advances the cursor to line 2.
+	block_lex := lexer_init_with_comments("a /* one\ntwo */ b")
+	testing.expect_value(t, next(&block_lex).text, "a")
+	block_comment := next(&block_lex)
+	testing.expect_value(t, block_comment.kind, .Comment)
+	testing.expect_value(t, block_comment.line, 1)
+	testing.expect_value(t, block_comment.column, 3)
+	block_after := next(&block_lex)
+	testing.expect_value(t, block_after.line, 2)
+	testing.expect_value(t, block_after.column, 8)
+}
+
+@(test)
+unterminated_block_comment_test :: proc(t: ^testing.T) {
+	cases := []struct {
+		src:           string,
+		keep_comments: bool,
+		token_count:   int,
+		error_offset:  int,
+		error_column:  int,
+	} {
+		{src = "/* open", token_count = 0, error_offset = 0, error_column = 1},
+		{src = "x /* open", token_count = 1, error_offset = 2, error_column = 3},
+		// Only the inner comment closes; the outer one is still unterminated.
+		{src = "/* a /* b */", token_count = 0, error_offset = 0, error_column = 1},
+		{
+			src = "/* open",
+			keep_comments = true,
+			token_count = 1,
+			error_offset = 0,
+			error_column = 1,
+		},
+	}
+
+	for c in cases {
+		lex := c.keep_comments ? lexer_init_with_comments(c.src) : lexer_init(c.src)
+		tokens, err := tokenize(&lex, context.allocator)
+		testing.expectf(t, err == nil, "tokenize(%q): %v", c.src, err)
+		defer delete(tokens, context.allocator)
+
+		testing.expect_value(
+			t,
+			lex.error,
+			Lex_Error.Unterminated_Block_Comment,
+			value_expr = c.src,
+		)
+		testing.expect_value(t, lex.error_offset, c.error_offset, value_expr = c.src)
+		testing.expect_value(t, lex.error_line, 1, value_expr = c.src)
+		testing.expect_value(t, lex.error_column, c.error_column, value_expr = c.src)
+		testing.expect_value(t, len(tokens), c.token_count, value_expr = c.src)
+		// An unterminated comment consumes the rest of the source, so the scan
+		// terminates at EOF instead of spinning.
+		testing.expect(t, cursor_eof(lex.cursor), "lexer should reach EOF")
+
+		if c.keep_comments && len(tokens) == 1 {
+			testing.expect_value(t, tokens[0].kind, .Comment, value_expr = c.src)
+			testing.expect_value(t, tokens[0].text, "/* open", value_expr = c.src)
+		}
+	}
+
+	// A line comment at EOF is complete, not an error.
+	line_lex := lexer_init("// open")
+	tokens, err := tokenize(&line_lex, context.allocator)
+	testing.expect(t, err == nil, "tokenize should succeed")
+	defer delete(tokens, context.allocator)
+	testing.expect_value(t, line_lex.error, Lex_Error.None)
+	testing.expect_value(t, len(tokens), 0)
 }

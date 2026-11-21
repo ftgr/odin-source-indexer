@@ -9,11 +9,14 @@ public one milestone at a time.
 
 ## Status
 
-Milestones 0–3 are complete: `tokens <file>` prints one token per line as
+Milestones 0–4 are complete: `tokens <file>` prints one token per line as
 `line:column kind text`, covering identifiers, keywords, operators, punctuation,
 numeric literals (including `0h` hex floats), interpreted, raw, and
-triple-quoted strings, and rune literals. Comments arrive in Milestone 4.
-`symbols` is still a placeholder. See [`GUIDE.md`](GUIDE.md) for the plan.
+triple-quoted strings, and rune literals. Line comments and nested block comments
+are skipped by default; the lexer can retain them as `Comment` tokens. Positions
+are 1-based, columns count runes, tabs count as one column, and CRLF counts as
+one line break. `symbols` is still a placeholder. See [`GUIDE.md`](GUIDE.md) for
+the plan.
 
 ## What it does
 
@@ -28,10 +31,11 @@ Today the CLI validates a command, prints usage, and dumps the token stream for
 - `tokens <file>` — dump the lexer's token stream, one token per line.
 - Serve the same answers over JSON-RPC for editor integration (later).
 
-Contract: stdout is data only (safe to pipe), diagnostics go to stderr, and
-exit codes are meaningful (`0` success, nonzero failure). A malformed literal
-becomes an `Invalid` token and is reported once as `file:line:column: error` on
-stderr, while the rest of the file is still tokenized.
+Contract: stdout is data only (safe to pipe) and diagnostics go to stderr.
+Exit `0` means the requested output is complete, `1` means the input could not be
+read, and `2` is a usage error. A malformed literal becomes an `Invalid` token
+and is reported once as `file:line:column: error` on stderr, while the rest of
+the file is still tokenized.
 
 ## Clone and run
 

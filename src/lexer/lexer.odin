@@ -4,9 +4,9 @@ import "core:mem"
 import "core:unicode"
 
 // Lexical scanning on top of Cursor. This file turns source bytes into Tokens:
-// whitespace, identifiers and keywords, operators, numeric literals, strings,
-// and rune literals. Token definitions live in token.odin; position tracking
-// lives in cursor.odin.
+// whitespace, comments, identifiers and keywords, operators, numeric literals,
+// strings, and rune literals. Token definitions live in token.odin; position
+// tracking lives in cursor.odin.
 //
 // Scanning is driven by next, which never fails: it always returns a token and
 // always consumes at least one byte unless it is at EOF. Problems are recorded
@@ -62,6 +62,79 @@ skip_whitespace :: proc(c: ^Cursor) {
 			return
 		}
 	}
+}
+
+// scan_comment consumes a line comment (`// ...`) or a nested block comment
+// (`/* ... */`) starting at the cursor. On success it returns a .Comment token
+// whose text includes the delimiters and true; otherwise it consumes nothing
+// and returns false, so next can fall through to the operator table.
+//
+// A line comment stops before the newline, leaving it for skip_whitespace so the
+// following token starts on the next line. Block comments nest like Odin's:
+// `/* a /* b */ c */` is one comment. An unterminated block comment records
+// Unterminated_Block_Comment at the comment's start and consumes the rest of the
+// source, so the scan still terminates.
+//
+// Comments are skipped by default; set Lexer.keep_comments (or use
+// lexer_init_with_comments) to return them as tokens instead.
+scan_comment :: proc(l: ^Lexer) -> (tok: Token, ok: bool) {
+	c := &l.cursor
+	if cursor_eof(c^) {
+		return {}, false
+	}
+
+	slash, _ := cursor_peek(c^)
+	if slash != '/' {
+		return {}, false
+	}
+	next_rune, _ := cursor_peek_ahead(c^, 1)
+	if next_rune != '/' && next_rune != '*' {
+		return {}, false
+	}
+
+	start := c.position
+	start_line := c.line
+	start_column := c.column
+
+	if next_rune == '/' {
+		// Line comment: everything up to (but not including) the newline.
+		for !cursor_eof(c^) {
+			r, _ := cursor_peek(c^)
+			if r == '\n' {
+				break
+			}
+			cursor_advance(c)
+		}
+		return make_token(c^, .Comment, start, start_line, start_column), true
+	}
+
+	// Block comment: consume the opening "/*" and track nesting depth.
+	cursor_advance(c) // '/'
+	cursor_advance(c) // '*'
+	depth := 1
+	for !cursor_eof(c^) && depth > 0 {
+		r, _ := cursor_peek(c^)
+		switch r {
+		case '/':
+			cursor_advance(c)
+			if ahead, _ := cursor_peek(c^); ahead == '*' {
+				cursor_advance(c)
+				depth += 1
+			}
+		case '*':
+			cursor_advance(c)
+			if ahead, _ := cursor_peek(c^); ahead == '/' {
+				cursor_advance(c)
+				depth -= 1
+			}
+		case:
+			cursor_advance(c)
+		}
+	}
+	if depth > 0 {
+		lexer_fail_at(l, .Unterminated_Block_Comment, start, start_line, start_column)
+	}
+	return make_token(c^, .Comment, start, start_line, start_column), true
 }
 
 // scan_identifier scans an identifier or keyword starting at the cursor.
@@ -224,24 +297,32 @@ Lex_Error :: enum u8 {
 	Unterminated_String,
 	Unterminated_Raw_String,
 	Unterminated_Rune,
+	Unterminated_Block_Comment,
 }
 
 // Lexer bundles the cursor with the first error seen. error_offset, error_line,
 // and error_column point at the cursor position when that error was recorded;
 // later errors are ignored so the diagnostic names the original problem.
 Lexer :: struct {
-	cursor:       Cursor,
-	error:        Lex_Error, // first error only
-	error_offset: int,
-	error_line:   int,
-	error_column: int,
+	cursor:        Cursor,
+	error:         Lex_Error, // first error only
+	error_offset:  int,
+	error_line:    int,
+	error_column:  int,
+	keep_comments: bool, // emit .Comment tokens instead of skipping comments
 }
 
 // lexer_init returns a Lexer positioned at the start of data. The lexer borrows
 // data; the caller must keep it alive for as long as the lexer and its tokens
-// are used.
+// are used. Comments are skipped; use lexer_init_with_comments to keep them.
 lexer_init :: proc(data: string) -> Lexer {
 	return {cursor = cursor_init(data)}
+}
+
+// lexer_init_with_comments returns a Lexer that emits comments as .Comment
+// tokens instead of skipping them. Ownership and lifetime match lexer_init.
+lexer_init_with_comments :: proc(data: string) -> Lexer {
+	return {cursor = cursor_init(data), keep_comments = true}
 }
 
 // lexer_fail_at records err as the lexer's first error at an explicit source
@@ -292,16 +373,26 @@ invalid_rune :: proc(c: ^Cursor) -> Token {
 	return make_token(c^, .Invalid, start, line, column)
 }
 
-// next returns the next token, skipping whitespace first. At EOF it returns
-// .EOF without consuming anything. Otherwise it dispatches on the first rune:
-// identifiers and keywords, numbers, strings, runes, then operators, with
-// invalid_rune as the final fallback. Every non-EOF path consumes at least one
-// byte, so a caller loop cannot spin.
+// next returns the next token, skipping whitespace and comments first. At EOF
+// it returns .EOF without consuming anything. When keep_comments is set, a
+// comment is returned as a .Comment token instead of being skipped.
+// Otherwise it dispatches on the first rune: identifiers and keywords, numbers,
+// strings, runes, then operators, with invalid_rune as the final fallback.
+// Every non-EOF path consumes at least one byte, so a caller loop cannot spin.
 next :: proc(l: ^Lexer) -> Token {
 	c := &l.cursor
-	skip_whitespace(c)
-	if cursor_eof(c^) {
-		return eof_token(c^)
+	for {
+		skip_whitespace(c)
+		if cursor_eof(c^) {
+			return eof_token(c^)
+		}
+		if tok, ok := scan_comment(l); ok {
+			if l.keep_comments {
+				return tok
+			}
+			continue
+		}
+		break
 	}
 
 	r, _ := cursor_peek(c^)
@@ -656,8 +747,9 @@ scan_rune :: proc(l: ^Lexer) -> Token {
 }
 
 // tokenize scans l's source into a newly allocated token slice, excluding the
-// .EOF token. The caller owns the result and frees it with
-// delete(tokens, allocator); token text still borrows the source buffer.
+// .EOF token. Comments appear only when l.keep_comments is set. The caller owns
+// the result and frees it with delete(tokens, allocator); token text still
+// borrows the source buffer.
 //
 // Only allocation failures are returned. Lexical problems are recorded in
 // l.error (and show up as .Invalid tokens), so the caller can report them after

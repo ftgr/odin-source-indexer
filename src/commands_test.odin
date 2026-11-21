@@ -9,7 +9,20 @@ count_lines_cases :: proc(t: ^testing.T) {
 	cases := []struct {
 		input: string,
 		want:  int,
-	}{{"", 0}, {"a", 1}, {"a\n", 1}, {"a\nb", 2}, {"a\n\n", 2}, {"\n", 1}, {"a\nb\nc", 3}}
+	} {
+		{"", 0},
+		{"a", 1},
+		{"a\n", 1},
+		{"a\nb", 2},
+		{"a\n\n", 2},
+		{"\n", 1},
+		{"a\nb\nc", 3},
+		// CRLF counts as one line break; a lone '\r' counts as none.
+		{"a\r\nb", 2},
+		{"a\r\n", 1},
+		{"a\r\nb\r\n", 2},
+		{"a\rb", 1},
+	}
 
 	buffer: [64]byte
 	for c in cases {
@@ -86,4 +99,21 @@ run_tokens_exit_codes :: proc(t: ^testing.T) {
 		context.allocator,
 	)
 	testing.expect_value(t, io_code, 1)
+
+	// A readable file with a lexical error still exits 0: the token dump is
+	// complete and the error is only a diagnostic on stderr.
+	lex_path := ".odin-source-indexer-lex-error.tmp"
+	write_err := os.write_entire_file_from_string(lex_path, "\"\\q\"")
+	defer os.remove(lex_path)
+	if !testing.expectf(
+		t,
+		write_err == nil,
+		"could not write fixture %s: %v",
+		lex_path,
+		write_err,
+	) {
+		return
+	}
+	lex_code := run_tokens([]string{"odin-source-indexer", "tokens", lex_path}, context.allocator)
+	testing.expect_value(t, lex_code, 0)
 }

@@ -77,6 +77,25 @@ otherwise; if a rule has to be broken, leave a comment explaining why.
   `ODIN_TEST_FAIL_ON_BAD_MEMORY` and `ODIN_TEST_ALWAYS_REPORT_MEMORY`. Fix the
   leak; never weaken those defines.
 
+## Parameters: pass by value unless a pointer is needed
+
+Odin has no `const` borrow, so a `^T` parameter reads as "this procedure may
+mutate `T`". Keep that signal honest:
+
+- Pass read-only inputs by value, including `string` and slices: only the
+  two- or three-word header is copied, not the underlying data.
+- Use `^T` only when the procedure mutates the value, when `T` is large enough
+  that copying is a measured cost, when identity/aliasing matters, or when a
+  called procedure requires a pointer (for example `fmt.fprintln` takes
+  `^os.File`).
+- Do not take `^T` merely to avoid copying a small struct. A pointer to a value
+  that is never changed misleads callers and hides accidental mutation.
+- Read-only helpers over lexer state take the value (see `cursor_eof`,
+  `cursor_peek`, `make_token`); only procedures that advance the cursor or
+  record an error take `^Cursor`/`^Lexer`.
+- Test procedures take `^testing.T` because the test framework requires it.
+- If an exception is unavoidable, comment why at the signature.
+
 ## Errors: handle everything that can fail
 
 Odin has no exceptions. A fallible call returns its failure in a second value
