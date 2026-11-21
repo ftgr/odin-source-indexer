@@ -9,33 +9,35 @@ public one milestone at a time.
 
 ## Status
 
-Milestones 0–4 are complete: `tokens <file>` prints one token per line as
+Milestones 0–5 are complete: `tokens <file>` prints one token per line as
 `line:column kind text`, covering identifiers, keywords, operators, punctuation,
 numeric literals (including `0h` hex floats), interpreted, raw, and
 triple-quoted strings, and rune literals. Line comments and nested block comments
 are skipped by default; the lexer can retain them as `Comment` tokens. Positions
 are 1-based, columns count runes, tabs count as one column, and CRLF counts as
-one line break. `symbols` is still a placeholder. See [`GUIDE.md`](GUIDE.md) for
-the plan.
+one line break. `symbols <file>` lists top-level declarations as
+`file:line:column<TAB>kind<TAB>name`, including packages, imports, procedures,
+structs, unions, enums, bit sets, types, constants, and variables. Directory
+walking and `--json` are still planned. See [`GUIDE.md`](GUIDE.md) for the plan.
 
 ## What it does
 
-Today the CLI validates a command, prints usage, and dumps the token stream for
-`tokens`; `symbols` is still a placeholder. As the milestones land it will:
+Today the CLI validates a command, prints usage, dumps the token stream for
+`tokens`, and lists top-level declarations for `symbols`. As the milestones land
+it will:
 
-- `symbols <file-or-dir>` — list declarations (packages, imports, procedures,
-  structs, unions, enums, bit sets, types, constants, variables) with file,
-  line, and column.
-- `symbols --json` — the same data as a stable JSON envelope for editors and
-  scripts.
+- `symbols <file>` — list declarations (packages, imports, procedures, structs,
+  unions, enums, bit sets, types, constants, variables) with file, line, and
+  column. Directory walking (M6) and `--json` (M7) are planned.
 - `tokens <file>` — dump the lexer's token stream, one token per line.
 - Serve the same answers over JSON-RPC for editor integration (later).
 
 Contract: stdout is data only (safe to pipe) and diagnostics go to stderr.
 Exit `0` means the requested output is complete, `1` means the input could not be
-read, and `2` is a usage error. A malformed literal becomes an `Invalid` token
-and is reported once as `file:line:column: error` on stderr, while the rest of
-the file is still tokenized.
+read or `symbols` found nothing to print, and `2` is a usage error. A malformed
+literal becomes an `Invalid` token and is reported once as
+`file:line:column: error` on stderr, while the rest of the file is still
+tokenized.
 
 ## Clone and run
 
@@ -63,7 +65,7 @@ optimised binary in `out/release/`.
 
 | Command | Purpose |
 | --- | --- |
-| `symbols <file-or-dir> [--json]` | Index declarations (planned) |
+| `symbols <file>` | List declarations as `file:line:column kind name` (directories and `--json` planned) |
 | `tokens <file>` | Dump the token stream as `line:column kind text` |
 | `help`, `-h`, `--help` | Show usage |
 
@@ -90,9 +92,9 @@ runs `make verify` before every commit.
 ```
 src/main.odin               CLI entry point, logging and leak tracking
 src/helpers.odin            command validation and usage
-src/commands.odin           read_source, count_lines, tokens command
+src/commands.odin           read_source, count_lines, tokens and symbols commands
 src/lexer/                  token model, cursor, and lexer
-src/index/                  symbol index (in progress)
+src/index/                  symbol model and top-level extraction
 testdata/                   sample inputs for tests
 tools/fmt-check.sh          format drift check (odinfmt has no --check)
 GUIDE.md                    milestones M0–M12 and design notes

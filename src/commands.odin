@@ -5,6 +5,7 @@ import "core:fmt"
 import "core:log"
 import "core:mem"
 import "core:os"
+import "index"
 import "lexer"
 
 // read_source reads the whole file at path into a buffer allocated with
@@ -129,5 +130,62 @@ run_tokens :: proc(command: []string, allocator: mem.Allocator) -> int {
 		log.errorf("tokens: %s:%d:%d: %v", filepath, lex.error_line, lex.error_column, lex.error)
 	}
 
+	return 0
+}
+
+// run_symbols implements `symbols <file>`: read the file, extract its top-level
+// declarations, and print one line per symbol as
+// `file:line:column<TAB>kind<TAB>name`. Exit codes: 0 when at least one symbol
+// was found, 1 for an unreadable file, an allocation failure, or an empty index,
+// 2 for a usage error.
+run_symbols :: proc(command: []string, allocator: mem.Allocator) -> int {
+	if len(command) != 3 {
+		prog := len(command) > 0 ? command[0] : "odin-source-indexer"
+		fmt.eprintfln("usage: %s symbols <file>", prog)
+		return 2
+	}
+	filepath := command[2]
+
+	data, _, err := read_source(filepath, allocator)
+	if err != nil {
+		log.errorf("symbols: %s: %v", filepath, err)
+		return 1
+	}
+	defer delete(data, allocator)
+
+	lex := lexer.lexer_init(string(data))
+	tokens, tokenize_err := lexer.tokenize(&lex, allocator)
+	if tokenize_err != nil {
+		log.errorf("symbols: %s: %v", filepath, tokenize_err)
+		return 1
+	}
+	defer delete(tokens, allocator)
+
+	// A lexical error leaves an Invalid token but does not stop the scan, so
+	// report it once and keep the symbols that were found.
+	if lex.error != .None {
+		log.errorf("symbols: %s:%d:%d: %v", filepath, lex.error_line, lex.error_column, lex.error)
+	}
+
+	idx, index_err := index.index_init(allocator)
+	if index_err != nil {
+		log.errorf("symbols: %s: %v", filepath, index_err)
+		return 1
+	}
+	defer index.index_destroy(&idx, allocator)
+
+	if extract_err := index.extract_file(tokens, filepath, &idx, allocator); extract_err != nil {
+		log.errorf("symbols: %s: %v", filepath, extract_err)
+		return 1
+	}
+
+	for sym in idx.symbols {
+		fmt.printf("%s:%d:%d\t%v\t%s\n", sym.file, sym.line, sym.column, sym.kind, sym.name)
+	}
+
+	if len(idx.symbols) == 0 {
+		log.errorf("symbols: %s: no declarations found", filepath)
+		return 1
+	}
 	return 0
 }

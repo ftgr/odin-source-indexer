@@ -8,7 +8,7 @@ import "core:os"
 // usage writes the command help. out is a pointer because fmt.fprintln takes
 // ^os.File; usage itself never mutates it (see AGENTS.md, parameters).
 usage :: proc(out: ^os.File) {
-	fmt.fprintln(out, "symbols <file-or-dir> [--json]")
+	fmt.fprintln(out, "symbols <file>")
 	fmt.fprintln(out, "tokens <file>")
 	fmt.fprintln(out, "help, -h, --help")
 }
@@ -27,8 +27,7 @@ validate_command :: proc(command: []string, allocator: mem.Allocator) -> int {
 		usage(os.stdout)
 		return 0
 	case "symbols":
-		fmt.println("symbols...")
-		return 0
+		return run_symbols(command, allocator)
 	case "tokens":
 		return run_tokens(command, allocator)
 	}

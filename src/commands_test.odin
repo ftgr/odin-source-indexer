@@ -117,3 +117,61 @@ run_tokens_exit_codes :: proc(t: ^testing.T) {
 	lex_code := run_tokens([]string{"odin-source-indexer", "tokens", lex_path}, context.allocator)
 	testing.expect_value(t, lex_code, 0)
 }
+
+@(test)
+run_symbols_exit_codes :: proc(t: ^testing.T) {
+	// Expected failures are logged; silence the logger so only real test
+	// problems appear in the output.
+	old_logger := context.logger
+	context.logger = log.nil_logger()
+	defer context.logger = old_logger
+
+	usage_code := run_symbols([]string{"odin-source-indexer", "symbols"}, context.allocator)
+	testing.expect_value(t, usage_code, 2)
+
+	io_code := run_symbols(
+		[]string{"odin-source-indexer", "symbols", ".odin-source-indexer-does-not-exist.tmp"},
+		context.allocator,
+	)
+	testing.expect_value(t, io_code, 1)
+
+	symbol_path := ".odin-source-indexer-symbols.tmp"
+	write_err := os.write_entire_file_from_string(
+		symbol_path,
+		"package demo\n\nName :: struct {}\n",
+	)
+	defer os.remove(symbol_path)
+	if !testing.expectf(
+		t,
+		write_err == nil,
+		"could not write fixture %s: %v",
+		symbol_path,
+		write_err,
+	) {
+		return
+	}
+	ok_code := run_symbols(
+		[]string{"odin-source-indexer", "symbols", symbol_path},
+		context.allocator,
+	)
+	testing.expect_value(t, ok_code, 0)
+
+	// An empty file indexes nothing, which GUIDE 6.1 treats as failure.
+	empty_path := ".odin-source-indexer-symbols-empty.tmp"
+	empty_err := os.write_entire_file_from_string(empty_path, "")
+	defer os.remove(empty_path)
+	if !testing.expectf(
+		t,
+		empty_err == nil,
+		"could not write fixture %s: %v",
+		empty_path,
+		empty_err,
+	) {
+		return
+	}
+	empty_code := run_symbols(
+		[]string{"odin-source-indexer", "symbols", empty_path},
+		context.allocator,
+	)
+	testing.expect_value(t, empty_code, 1)
+}
