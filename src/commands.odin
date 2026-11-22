@@ -133,54 +133,64 @@ run_tokens :: proc(command: []string, allocator: mem.Allocator) -> int {
 	return 0
 }
 
-// run_symbols implements `symbols <file>`: read the file, extract its top-level
-// declarations, and print one line per symbol as
-// `file:line:column<TAB>kind<TAB>name`. Exit codes: 0 when at least one symbol
-// was found, 1 for an unreadable file, an allocation failure, or an empty index,
-// 2 for a usage error.
+// symbols_walk_error logs recoverable batch-index problems. It is the CLI
+// boundary for the index package's error callback.
+symbols_walk_error :: proc(
+	user_data: rawptr,
+	path: string,
+	line, column: int,
+	err: index.Index_Error,
+) {
+	_ = user_data
+	if line > 0 {
+		log.warnf("symbols: %s:%d:%d: %v", path, line, column, err)
+	} else {
+		log.warnf("symbols: %s: %v", path, err)
+	}
+}
+
+// run_symbols implements `symbols <file-or-dir>`: index top-level declarations
+// and print one line per symbol as `file:line:column<TAB>kind<TAB>name`.
+// Counters and warnings go to stderr. Exit codes: 0 when at least one symbol
+// was found, 1 for an unreadable root or an empty index, 2 for a usage error.
 run_symbols :: proc(command: []string, allocator: mem.Allocator) -> int {
 	if len(command) != 3 {
 		prog := len(command) > 0 ? command[0] : "odin-source-indexer"
-		fmt.eprintfln("usage: %s symbols <file>", prog)
+		fmt.eprintfln("usage: %s symbols <file-or-dir>", prog)
 		return 2
 	}
 	filepath := command[2]
 
-	data, _, err := read_source(filepath, allocator)
-	if err != nil {
-		log.errorf("symbols: %s: %v", filepath, err)
-		return 1
-	}
-	defer delete(data, allocator)
+	arenas: index.Index_Arenas
+	index.index_arenas_init(&arenas, allocator)
+	defer index.index_arenas_destroy(&arenas)
 
-	lex := lexer.lexer_init(string(data))
-	tokens, tokenize_err := lexer.tokenize(&lex, allocator)
-	if tokenize_err != nil {
-		log.errorf("symbols: %s: %v", filepath, tokenize_err)
-		return 1
-	}
-	defer delete(tokens, allocator)
-
-	// A lexical error leaves an Invalid token but does not stop the scan, so
-	// report it once and keep the symbols that were found.
-	if lex.error != .None {
-		log.errorf("symbols: %s:%d:%d: %v", filepath, lex.error_line, lex.error_column, lex.error)
-	}
-
-	idx, index_err := index.index_init(allocator)
+	index_allocator := index.index_arenas_index_allocator(&arenas)
+	idx, index_err := index.index_init(index_allocator)
 	if index_err != nil {
 		log.errorf("symbols: %s: %v", filepath, index_err)
 		return 1
 	}
-	defer index.index_destroy(&idx, allocator)
+	defer index.index_destroy(&idx, index_allocator)
 
-	if extract_err := index.extract_file(tokens, filepath, &idx, allocator); extract_err != nil {
-		log.errorf("symbols: %s: %v", filepath, extract_err)
+	stats, walk_err := index.index_path(
+		filepath,
+		&idx,
+		&arenas,
+		index.Walk_Options{on_error = symbols_walk_error},
+	)
+	if walk_err != nil {
+		log.errorf("symbols: %s: %v", filepath, walk_err)
 		return 1
 	}
 
 	for sym in idx.symbols {
 		fmt.printf("%s:%d:%d\t%v\t%s\n", sym.file, sym.line, sym.column, sym.kind, sym.name)
+	}
+
+	log.infof("symbols: indexed %d file(s), %d symbol(s)", stats.files, stats.symbols)
+	if stats.failures > 0 {
+		log.warnf("symbols: %d file(s) or directory entries failed", stats.failures)
 	}
 
 	if len(idx.symbols) == 0 {

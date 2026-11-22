@@ -174,4 +174,43 @@ run_symbols_exit_codes :: proc(t: ^testing.T) {
 		context.allocator,
 	)
 	testing.expect_value(t, empty_code, 1)
+
+	// A directory tree is indexed the same way as a single file.
+	temp, temp_err := os.temp_directory(context.allocator)
+	if !testing.expectf(t, temp_err == nil, "temp_directory: %v", temp_err) {
+		return
+	}
+	defer delete(temp, context.allocator)
+
+	dir_path, join_err := os.join_path(
+		{temp, "odin-source-indexer-symbols-dir"},
+		context.allocator,
+	)
+	if !testing.expectf(t, join_err == nil, "join_path: %v", join_err) {
+		return
+	}
+	defer delete(dir_path, context.allocator)
+	_ = os.remove_all(dir_path)
+	if make_err := os.make_directory_all(dir_path); make_err != nil {
+		testing.expectf(t, false, "make_directory_all(%s): %v", dir_path, make_err)
+		return
+	}
+	defer os.remove_all(dir_path)
+
+	dir_file, file_err := os.join_path({dir_path, "a.odin"}, context.allocator)
+	if !testing.expectf(t, file_err == nil, "join_path(a.odin): %v", file_err) {
+		return
+	}
+	defer delete(dir_file, context.allocator)
+	if dir_write_err := os.write_entire_file_from_string(dir_file, "package demo\n\nDir :: 1\n");
+	   dir_write_err != nil {
+		testing.expectf(t, false, "write %s: %v", dir_file, dir_write_err)
+		return
+	}
+
+	dir_code := run_symbols(
+		[]string{"odin-source-indexer", "symbols", dir_path},
+		context.allocator,
+	)
+	testing.expect_value(t, dir_code, 0)
 }

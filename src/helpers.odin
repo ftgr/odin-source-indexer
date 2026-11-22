@@ -8,7 +8,7 @@ import "core:os"
 // usage writes the command help. out is a pointer because fmt.fprintln takes
 // ^os.File; usage itself never mutates it (see AGENTS.md, parameters).
 usage :: proc(out: ^os.File) {
-	fmt.fprintln(out, "symbols <file>")
+	fmt.fprintln(out, "symbols <file-or-dir>")
 	fmt.fprintln(out, "tokens <file>")
 	fmt.fprintln(out, "help, -h, --help")
 }

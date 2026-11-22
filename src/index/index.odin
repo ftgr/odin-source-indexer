@@ -29,13 +29,14 @@ Symbol :: struct {
 
 // Index is an append-only collection of symbols. allocator owns the symbol
 // slice, every name, and every file path; free it with index_destroy using the
-// same allocator.
+// same allocator. With a region allocator (see Index_Arenas), index_destroy
+// only zeroes the Index; destroy the arena to release the memory.
 Index :: struct {
 	symbols: [dynamic]Symbol,
 }
 
 // index_init returns an empty Index. The caller owns it and frees it with
-// index_destroy(&idx, allocator).
+// index_destroy(&idx, allocator), or with the owning arena.
 index_init :: proc(allocator: mem.Allocator) -> (idx: Index, err: mem.Allocator_Error) {
 	idx.symbols, err = make([dynamic]Symbol, allocator)
 	return
@@ -73,14 +74,20 @@ index_add :: proc(
 	return nil
 }
 
-// index_destroy frees every owned string and the symbol slice. allocator must
-// be the one passed to index_init and index_add.
+// index_destroy releases every owned string and the symbol slice. allocator
+// must be the one passed to index_init and index_add.
+//
+// Region allocators (mem.Arena, mem.Dynamic_Arena) do not support individual
+// frees. When allocator reports no .Free feature, this procedure only zeroes
+// the Index; destroy the arena to release the memory.
 index_destroy :: proc(idx: ^Index, allocator: mem.Allocator) {
-	for sym in idx.symbols {
-		delete(sym.name, allocator)
-		delete(sym.file, allocator)
+	if .Free in mem.query_features(allocator) {
+		for sym in idx.symbols {
+			delete(sym.name, allocator)
+			delete(sym.file, allocator)
+		}
+		// A dynamic array remembers the allocator it was created with.
+		delete(idx.symbols)
 	}
-	// A dynamic array remembers the allocator it was created with.
-	delete(idx.symbols)
 	idx^ = {}
 }

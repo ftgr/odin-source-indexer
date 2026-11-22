@@ -9,26 +9,28 @@ public one milestone at a time.
 
 ## Status
 
-Milestones 0–5 are complete: `tokens <file>` prints one token per line as
+Milestones 0–6 are complete: `tokens <file>` prints one token per line as
 `line:column kind text`, covering identifiers, keywords, operators, punctuation,
 numeric literals (including `0h` hex floats), interpreted, raw, and
 triple-quoted strings, and rune literals. Line comments and nested block comments
 are skipped by default; the lexer can retain them as `Comment` tokens. Positions
 are 1-based, columns count runes, tabs count as one column, and CRLF counts as
-one line break. `symbols <file>` lists top-level declarations as
+one line break. `symbols <file-or-dir>` lists top-level declarations as
 `file:line:column<TAB>kind<TAB>name`, including packages, imports, procedures,
-structs, unions, enums, bit sets, types, constants, and variables. Directory
-walking and `--json` are still planned. See [`GUIDE.md`](GUIDE.md) for the plan.
+structs, unions, enums, bit sets, types, constants, and variables. Directories
+are walked recursively with two arenas (long-lived index, per-file scratch) and
+counters go to stderr. `--json` and stable output ordering are still planned.
+See [`GUIDE.md`](GUIDE.md) for the plan.
 
 ## What it does
 
 Today the CLI validates a command, prints usage, dumps the token stream for
-`tokens`, and lists top-level declarations for `symbols`. As the milestones land
-it will:
+`tokens`, and indexes top-level declarations for `symbols`. As the milestones
+land it will:
 
-- `symbols <file>` — list declarations (packages, imports, procedures, structs,
-  unions, enums, bit sets, types, constants, variables) with file, line, and
-  column. Directory walking (M6) and `--json` (M7) are planned.
+- `symbols <file-or-dir>` — list declarations (packages, imports, procedures,
+  structs, unions, enums, bit sets, types, constants, variables) with file, line,
+  and column, walking directories recursively. `--json` (M7) is planned.
 - `tokens <file>` — dump the lexer's token stream, one token per line.
 - Serve the same answers over JSON-RPC for editor integration (later).
 
@@ -65,7 +67,7 @@ optimised binary in `out/release/`.
 
 | Command | Purpose |
 | --- | --- |
-| `symbols <file>` | List declarations as `file:line:column kind name` (directories and `--json` planned) |
+| `symbols <file-or-dir>` | List declarations as `file:line:column kind name` (`--json` planned) |
 | `tokens <file>` | Dump the token stream as `line:column kind text` |
 | `help`, `-h`, `--help` | Show usage |
 
@@ -94,7 +96,7 @@ src/main.odin               CLI entry point, logging and leak tracking
 src/helpers.odin            command validation and usage
 src/commands.odin           read_source, count_lines, tokens and symbols commands
 src/lexer/                  token model, cursor, and lexer
-src/index/                  symbol model and top-level extraction
+src/index/                  symbols, extraction, directory walk, and arenas
 testdata/                   sample inputs for tests
 tools/fmt-check.sh          format drift check (odinfmt has no --check)
 GUIDE.md                    milestones M0–M12 and design notes
